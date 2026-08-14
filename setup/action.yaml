@@ -1,0 +1,27 @@
+---
+name: Setup ros_buildfarm
+description: Install ros_buildfarm and its dependencies for use in CI and release jobs
+
+inputs:
+  ros_buildfarm_ref:
+    description: >
+      Git ref of ros_buildfarm to install. Defaults to latest PyPI release.
+      Set to a branch/tag/SHA to install directly from GitHub, e.g. 'master'.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install ros_buildfarm
+      shell: bash
+      run: |-
+        python3 -m pip install -U "setuptools<69" pip
+        python3 -m pip install -U colcon-core colcon-test-result PyYAML
+        if [[ -n "${{ inputs.ros_buildfarm_ref }}" ]]; then
+          python3 -m pip install -U \
+            "git+https://github.com/ros-infrastructure/ros_buildfarm.git@${{ inputs.ros_buildfarm_ref }}"
+        else
+          python3 -m pip install -U ros_buildfarm
+        fi
+        echo "${HOME}/.local/bin" >> "$GITHUB_PATH"

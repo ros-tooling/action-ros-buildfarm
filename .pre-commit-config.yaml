@@ -1,0 +1,23 @@
+---
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/polymathrobotics/polymath_code_standard
+    rev: v2.3.0
+    hooks:
+      # Basic checks and fixes that apply to any text file and the git repository itself
+      - id: polymath-general
+
+      # Enforce and insert copyright headers in source code for the project's license
+      - id: polymath-copyright
+        args: [--license, Apache-2.0, --wildcard-copyright-org, --reuse-style]
+
+      # Implementation languages
+      - id: polymath-python
+      - id: polymath-shell
+
+      # Markdown/up languages
+      - id: polymath-markdown
+      - id: polymath-xml
+      - id: polymath-json
+      - id: polymath-yaml

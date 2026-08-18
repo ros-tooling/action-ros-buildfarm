@@ -80,31 +80,51 @@ echo "::endgroup::"
 
 echo "::group::Run build and test"
 pushd "${WORK_DIR}"
-# Run in a subshell so test failures don't abort the outer script.
-# Write outputs from inside the subshell since the vars live there.
-# -y accepts workspace content already present (our pre-populated ws/src).
+# The prerelease script is intentionally lenient: it exits 0 even when Docker
+# steps fail so that test results can still be collected. We use && to chain
+# the output write so that a non-zero exit from prerelease.sh propagates as
+# a build failure without also falsely reporting a test result of 0.
+PRERELEASE_RC=0
 (
     set +eu
     # shellcheck source=/dev/null
-    . prerelease.sh -y
-    UNDERLAY_RC=${test_result_RC_underlay:-$?}
-    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-        echo "underlay_test_result=${UNDERLAY_RC}" >> "${GITHUB_OUTPUT}"
-    fi
-    exit "${UNDERLAY_RC}"
-) || true
+    . prerelease.sh -y && {
+        UNDERLAY_RC=${test_result_RC_underlay:-0}
+        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+            echo "underlay_test_result=${UNDERLAY_RC}" >> "${GITHUB_OUTPUT}"
+        fi
+        exit "${UNDERLAY_RC}"
+    }
+) || PRERELEASE_RC=$?
 popd
 echo "::endgroup::"
 
-UNDERLAY_RC=0
+# Read test result written by the subshell, fall back to prerelease exit code.
+UNDERLAY_RC=${PRERELEASE_RC}
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    UNDERLAY_RC=$(grep 'underlay_test_result=' "${GITHUB_OUTPUT}" | tail -1 | cut -d= -f2 || echo 0)
+    FILE_RC=$(grep 'underlay_test_result=' "${GITHUB_OUTPUT}" 2>/dev/null | tail -1 | cut -d= -f2 || true)
+    UNDERLAY_RC=${FILE_RC:-${PRERELEASE_RC}}
 fi
 
 # Capture install dir for downstream steps
 INSTALL_DIR=$(find "${WORK_DIR}" -maxdepth 5 -type d -name 'install' 2>/dev/null | head -1 || true)
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "install_dir=${INSTALL_DIR}" >> "${GITHUB_OUTPUT}"
+fi
+
+# Build failure: prerelease.sh itself exited non-zero (Docker failure, etc.)
+# This is always fatal regardless of ABORT_ON_TEST_FAILURE.
+if [[ "${PRERELEASE_RC}" != "0" ]]; then
+    echo "Build failed (prerelease exit code ${PRERELEASE_RC})"
+    exit "${PRERELEASE_RC}"
+fi
+
+# Build success check: if no install space was produced the build silently failed.
+# The prerelease script exits 0 even when Docker steps fail, so this is the
+# reliable indicator that the build actually completed.
+if [[ -z "${INSTALL_DIR}" ]]; then
+    echo "Build failed: no install space found in ${WORK_DIR}"
+    exit 1
 fi
 
 # Collect test results for artifact upload

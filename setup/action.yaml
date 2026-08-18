@@ -16,12 +16,10 @@ runs:
     - name: Install ros_buildfarm
       shell: bash
       run: |-
-        python3 -m pip install -U "setuptools<69" pip
-        python3 -m pip install -U colcon-core colcon-test-result PyYAML
         if [[ -n "${{ inputs.ros_buildfarm_ref }}" ]]; then
-          python3 -m pip install -U \
+          python3 -m pip install --break-system-packages \
             "git+https://github.com/ros-infrastructure/ros_buildfarm.git@${{ inputs.ros_buildfarm_ref }}"
         else
-          python3 -m pip install -U ros_buildfarm
+          python3 -m pip install --break-system-packages ros_buildfarm
         fi
         echo "${HOME}/.local/bin" >> "$GITHUB_PATH"

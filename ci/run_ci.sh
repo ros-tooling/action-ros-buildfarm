@@ -84,7 +84,7 @@ pushd "${WORK_DIR}"
 # Write outputs from inside the subshell since the vars live there.
 # -y accepts workspace content already present (our pre-populated ws/src).
 (
-    set +e
+    set +eu
     # shellcheck source=/dev/null
     . prerelease.sh -y
     UNDERLAY_RC=${test_result_RC_underlay:-$?}

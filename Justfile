@@ -15,3 +15,9 @@ act_container_opts := "--user=" + `id -u` + ":" + `id -g` \
 ci distro:
     act -j test-ci --matrix ros_distro:{{distro}} \
         --container-options "{{act_container_opts}}"
+
+# Run the package action locally against the fixture package for a given distro.
+# Usage: just package humble
+package distro:
+    act -j test-package --matrix ros_distro:{{distro}} \
+        --container-options "{{act_container_opts}}"

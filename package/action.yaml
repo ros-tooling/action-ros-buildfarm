@@ -1,0 +1,90 @@
+---
+name: ros_buildfarm package
+description: >
+  Build .deb packages from local ROS package source without a GBP release
+  repository or rosdistro registration. Uses bloom to generate Debian
+  packaging metadata, dpkg-buildpackage -S for the source package, then
+  hands off to the ros_buildfarm binary Docker pipeline
+  (run_binarydeb_job.py --skip-download-sourcepkg). The binary build runs
+  in the same generated Docker container as the real buildfarm.
+
+inputs:
+  source_dir:
+    description: >
+      Path to the directory containing the ROS package source (must contain
+      package.xml). Defaults to github.workspace. A copy is made before
+      modification so the original checkout is not altered.
+    required: false
+    default: ${{ github.workspace }}
+  ros_distro:
+    description: ROS distribution name (e.g. rolling, humble, jazzy)
+    required: true
+  os_name:
+    description: Operating system name
+    required: false
+    default: ubuntu
+  os_code_name:
+    description: OS version code name (e.g. noble, jammy)
+    required: true
+  arch:
+    description: Target architecture
+    required: false
+    default: amd64
+  skip_tests:
+    description: Pass --skip-tests to the binary build
+    required: false
+    default: 'false'
+  upload_debs:
+    description: Upload resulting .deb files as a GitHub Actions artifact
+    required: false
+    default: 'true'
+
+outputs:
+  deb_dir:
+    description: Path to the directory containing all generated .deb files
+    value: ${{ steps.build.outputs.deb_dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup ros_buildfarm
+      # uses: ros-tooling/action-ros-buildfarm/setup@main
+      uses: ./setup
+
+    - name: Install packaging tools
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y -q \
+          python3-bloom \
+          devscripts \
+          dpkg-dev \
+          rsync
+
+    - name: Initialise rosdep
+      shell: bash
+      run: |
+        if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
+          sudo rosdep init
+        fi
+        rosdep update --include-eol-distros
+
+    - id: build
+      shell: bash
+      env:
+        CONFIG_URL: https://raw.githubusercontent.com/ros2/ros_buildfarm_config/ros2/index.yaml
+        ROS_DISTRO: ${{ inputs.ros_distro }}
+        OS_NAME: ${{ inputs.os_name }}
+        OS_CODE_NAME: ${{ inputs.os_code_name }}
+        ARCH: ${{ inputs.arch }}
+        SOURCE_DIR: ${{ inputs.source_dir }}
+        SKIP_TESTS: ${{ inputs.skip_tests }}
+      run: bash ${{ github.action_path }}/run_package.sh
+
+    - name: Upload deb artifacts
+      if: inputs.upload_debs == 'true' && always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debs-${{ inputs.ros_distro }}-${{ inputs.os_code_name }}-${{ inputs.arch }}
+        path: ${{ github.workspace }}/.ros_buildfarm_debs
+        if-no-files-found: warn

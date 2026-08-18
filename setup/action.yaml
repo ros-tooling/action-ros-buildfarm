@@ -5,10 +5,11 @@ description: Install ros_buildfarm and its dependencies for use in CI and releas
 inputs:
   ros_buildfarm_ref:
     description: >
-      Git ref of ros_buildfarm to install. Defaults to latest PyPI release.
-      Set to a branch/tag/SHA to install directly from GitHub, e.g. 'master'.
+      Git ref of ros_buildfarm to install from GitHub. Defaults to master.
+      The PyPI release (4.1.0) predates the apt-key removal in Ubuntu 26.04;
+      master has the fix. Set to a specific tag or SHA to pin.
     required: false
-    default: ''
+    default: master
 
 runs:
   using: composite
@@ -16,12 +17,8 @@ runs:
     - name: Install ros_buildfarm
       shell: bash
       run: |-
-        if [[ -n "${{ inputs.ros_buildfarm_ref }}" ]]; then
-          python3 -m pip install --break-system-packages \
-            "git+https://github.com/ros-infrastructure/ros_buildfarm.git@${{ inputs.ros_buildfarm_ref }}"
-        else
-          python3 -m pip install --break-system-packages ros_buildfarm
-        fi
+        python3 -m pip install --break-system-packages \
+          "git+https://github.com/ros-infrastructure/ros_buildfarm.git@${{ inputs.ros_buildfarm_ref }}"
         # Add both the user and system script directories -- pip may use either
         # depending on whether it runs as root and what $HOME is.
         python3 -c "import site; print(site.getuserbase() + '/bin')" >> "$GITHUB_PATH"

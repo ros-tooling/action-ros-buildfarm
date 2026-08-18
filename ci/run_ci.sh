@@ -43,6 +43,9 @@ ABORT_ON_TEST_FAILURE="${ABORT_ON_TEST_FAILURE:-false}"
 WORK_DIR=$(mktemp -d)
 echo "Working in ${WORK_DIR}"
 
+# Show plain Docker build output (not the interactive progress display).
+export BUILDKIT_PROGRESS=plain
+
 # Pre-populate underlay workspace with local source
 if [[ -n "${SOURCE_DIR}" ]]; then
     mkdir -p "${WORK_DIR}/ws/src"
@@ -106,12 +109,6 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     UNDERLAY_RC=${FILE_RC:-${PRERELEASE_RC}}
 fi
 
-# Capture install dir for downstream steps
-INSTALL_DIR=$(find "${WORK_DIR}" -maxdepth 5 -type d -name 'install' 2>/dev/null | head -1 || true)
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    echo "install_dir=${INSTALL_DIR}" >> "${GITHUB_OUTPUT}"
-fi
-
 # Build failure: prerelease.sh itself exited non-zero (Docker failure, etc.)
 # This is always fatal regardless of ABORT_ON_TEST_FAILURE.
 if [[ "${PRERELEASE_RC}" != "0" ]]; then
@@ -119,11 +116,11 @@ if [[ "${PRERELEASE_RC}" != "0" ]]; then
     exit "${PRERELEASE_RC}"
 fi
 
-# Build success check: if no install space was produced the build silently failed.
-# The prerelease script exits 0 even when Docker steps fail, so this is the
-# reliable indicator that the build actually completed.
-if [[ -z "${INSTALL_DIR}" ]]; then
-    echo "Build failed: no install space found in ${WORK_DIR}"
+# Build success check: the prerelease script exits 0 even when Docker steps
+# fail silently. The test results directory is volume-mounted back to the host
+# by the buildfarm; its absence means the build never completed.
+if [[ ! -d "${WORK_DIR}/ws/test_results" ]]; then
+    echo "Build failed: no test results directory found -- build likely failed inside Docker"
     exit 1
 fi
 

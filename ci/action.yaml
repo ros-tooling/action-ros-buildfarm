@@ -66,9 +66,6 @@ outputs:
   underlay_test_result:
     description: Exit code of the underlay test suite (0 = pass)
     value: ${{ steps.run_job.outputs.underlay_test_result }}
-  install_dir:
-    description: Absolute path to the built install space
-    value: ${{ steps.run_job.outputs.install_dir }}
 
 runs:
   using: composite

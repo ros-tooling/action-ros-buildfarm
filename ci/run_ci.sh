@@ -117,10 +117,11 @@ if [[ "${PRERELEASE_RC}" != "0" ]]; then
 fi
 
 # Build success check: the prerelease script exits 0 even when Docker steps
-# fail silently. The test results directory is volume-mounted back to the host
-# by the buildfarm; its absence means the build never completed.
-if [[ ! -d "${WORK_DIR}/ws/test_results" ]]; then
-    echo "Build failed: no test results directory found -- build likely failed inside Docker"
+# fail silently. The install space is volume-mounted back to the host by the
+# buildfarm at ws/install_isolated; its absence means the build never completed.
+# (Absence of test_results is not an error -- packages with no tests don't produce one.)
+if [[ ! -d "${WORK_DIR}/ws/install_isolated" ]]; then
+    echo "Build failed: no install space found at ${WORK_DIR}/ws/install_isolated -- build likely failed inside Docker"
     exit 1
 fi
 

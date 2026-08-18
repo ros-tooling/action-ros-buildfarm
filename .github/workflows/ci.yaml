@@ -1,0 +1,37 @@
+---
+# Verifies the ci action works against the fixture package in fixtures/ros_buildfarm_test/
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-ci:
+    name: ci / ${{ matrix.ros_distro }} / ${{ matrix.os_code_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ros_distro: humble
+            os_code_name: jammy
+          - ros_distro: kilted
+            os_code_name: noble
+          - ros_distro: jazzy
+            os_code_name: noble
+          - ros_distro: lyrical
+            os_code_name: resolute
+          - ros_distro: rolling
+            os_code_name: resolute
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./ci
+        with:
+          ros_distro: ${{ matrix.ros_distro }}
+          os_code_name: ${{ matrix.os_code_name }}
+          source_dir: ${{ github.workspace }}/fixtures/ros_buildfarm_test
+          abort_on_test_failure: 'true'

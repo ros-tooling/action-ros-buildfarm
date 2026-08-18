@@ -1,0 +1,98 @@
+---
+name: ros_buildfarm CI
+description: >
+  Build and test ROS packages using the exact ros_buildfarm pipeline.
+  Uses the prerelease job approach so packages do not need to be registered
+  in any rosdistro -- local source or custom repos are supported.
+
+inputs:
+  config_url:
+    description: >
+      URL of the buildfarm configuration index. Defaults to the official ROS 2
+      config, which covers rolling/humble/jazzy on Ubuntu. Override with your
+      own index URL when using a custom mini-distro.
+    required: false
+    default: https://raw.githubusercontent.com/ros2/ros_buildfarm_config/ros2/index.yaml
+  config_name:
+    description: Name of the prerelease configuration in the buildfarm config
+    required: false
+    default: default
+  ros_distro:
+    description: ROS distribution name (e.g. rolling, humble, jazzy)
+    required: true
+  os_name:
+    description: Operating system name
+    required: false
+    default: ubuntu
+  os_code_name:
+    description: OS version code name (e.g. noble, jammy)
+    required: true
+  arch:
+    description: Target architecture
+    required: false
+    default: amd64
+  source_dir:
+    description: >
+      Path to the directory containing your ROS package source(s).
+      Defaults to github.workspace. The contents are copied into the
+      prerelease underlay workspace (ws/src) before the build starts.
+      Set to '' to skip pre-population and rely on custom_repos / underlay_repos.
+    required: false
+    default: ${{ github.workspace }}
+  underlay_repos:
+    description: >
+      Space-separated names of repos registered in the rosdistro to include
+      in the underlay workspace (in addition to any local source_dir content).
+    required: false
+    default: ''
+  custom_repos:
+    description: >
+      Newline-separated custom repo descriptors for repos not in rosdistro.
+      Format per line: name:type:url:branch
+      Example:
+        my_pkg:git:https://github.com/myorg/my_pkg.git:main
+    required: false
+    default: ''
+  abort_on_test_failure:
+    description: Return non-zero exit code if any tests fail
+    required: false
+    default: 'false'
+  upload_test_results:
+    description: Upload test results as a GitHub Actions artifact
+    required: false
+    default: 'true'
+
+outputs:
+  underlay_test_result:
+    description: Exit code of the underlay test suite (0 = pass)
+    value: ${{ steps.run_job.outputs.underlay_test_result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup ros_buildfarm
+      # uses: ros-tooling/action-ros-buildfarm/setup@main
+      uses: ./setup
+
+    - id: run_job
+      shell: bash
+      env:
+        CONFIG_URL: ${{ inputs.config_url }}
+        CONFIG_NAME: ${{ inputs.config_name }}
+        ROS_DISTRO: ${{ inputs.ros_distro }}
+        OS_NAME: ${{ inputs.os_name }}
+        OS_CODE_NAME: ${{ inputs.os_code_name }}
+        ARCH: ${{ inputs.arch }}
+        SOURCE_DIR: ${{ inputs.source_dir }}
+        UNDERLAY_REPOS: ${{ inputs.underlay_repos }}
+        CUSTOM_REPOS: ${{ inputs.custom_repos }}
+        ABORT_ON_TEST_FAILURE: ${{ inputs.abort_on_test_failure }}
+      run: bash ${{ github.action_path }}/run_ci.sh
+
+    - name: Upload test results
+      if: inputs.upload_test_results == 'true' && always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-ci-${{ inputs.ros_distro }}-${{ inputs.os_code_name }}-${{ inputs.arch }}
+        path: ${{ github.workspace }}/.ros_buildfarm_test_results
+        if-no-files-found: ignore

@@ -51,24 +51,6 @@ runs:
       # uses: ros-tooling/action-ros-buildfarm/setup@main
       uses: ./setup
 
-    - name: Install packaging tools
-      shell: bash
-      run: |
-        sudo apt-get update -q
-        sudo apt-get install -y -q \
-          python3-bloom \
-          devscripts \
-          dpkg-dev \
-          rsync
-
-    - name: Initialise rosdep
-      shell: bash
-      run: |
-        if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
-          sudo rosdep init
-        fi
-        rosdep update --include-eol-distros
-
     - id: build
       shell: bash
       env:

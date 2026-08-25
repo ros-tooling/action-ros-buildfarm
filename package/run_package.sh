@@ -35,6 +35,7 @@ SKIP_TESTS="${SKIP_TESTS:-false}"
 : "${ROS_DISTRO:?ROS_DISTRO is required}"
 : "${OS_CODE_NAME:?OS_CODE_NAME is required}"
 
+
 WORK_DIR=$(mktemp -d)
 PACKAGE_DIR="${WORK_DIR}/package_src"
 BINARYPKG_DIR="${WORK_DIR}/binarydeb"
@@ -60,7 +61,7 @@ git clone --depth 1 \
 # The Dockerfile template embeds this key via signed-by= (not apt-key).
 ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest \
     | grep -F "tag_name" | awk -F'"' '{print $4}')
-# shellcheck source=/etc/os-release
+# shellcheck source=/dev/null
 . /etc/os-release
 curl -L -o /tmp/ros2-apt-source.deb \
     "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.${UBUNTU_CODENAME:-${VERSION_CODENAME}}_all.deb"
@@ -69,6 +70,16 @@ gpg --no-default-keyring \
     --keyring /usr/share/keyrings/ros2-latest-archive-keyring.gpg \
     --armor --export > "${KEY_DIR}/ros.asc"
 sudo apt-get update -q
+
+# Install packaging tools needed on the runner (bloom for debian/ generation,
+# devscripts/dpkg-dev for dpkg-buildpackage, rsync for orig tarball creation)
+sudo apt-get install -q -y python3-bloom devscripts dpkg-dev rsync
+
+# Initialise rosdep -- bloom uses it to resolve ROS keys to Debian package names
+if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
+    sudo rosdep init
+fi
+rosdep update --ros-distro "${ROS_DISTRO}"
 
 echo "::endgroup::"
 
@@ -134,7 +145,19 @@ if [[ "${SKIP_TESTS}" == "true" ]]; then
 fi
 
 echo "::group::Generate binary task Dockerfile"
-run_binarydeb_job.py "${RBF_ARGS[@]}"
+if [[ $(id -u) -eq 0 ]]; then
+    # ros_buildfarm scripts assert uid != 0. Running as root (e.g. in act),
+    # so create a build user and su to it for this call. Root can su without
+    # a password. The uid is embedded in the generated Dockerfiles.
+    id rbf &>/dev/null || useradd -m -u 1001 -s /bin/bash rbf
+    DOCKER_GID=$(stat -c %g /var/run/docker.sock 2>/dev/null || echo 0)
+    usermod -aG "${DOCKER_GID}" rbf 2>/dev/null || true
+    chown -R rbf:rbf "${WORK_DIR}"
+    # shellcheck disable=SC2046
+    su rbf -s /bin/bash -c "PATH=${PATH} run_binarydeb_job.py $(printf '%q ' "${RBF_ARGS[@]}")"
+else
+    run_binarydeb_job.py "${RBF_ARGS[@]}"
+fi
 echo "::endgroup::"
 
 IMAGE_TAG="${ROS_DISTRO}_${OS_CODE_NAME}"
